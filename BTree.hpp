@@ -1091,8 +1091,7 @@ namespace sjtu
 			info.wenjianwei = sizeof(xinxi);
 			mid root;
 			yezi ye;
-			root.offset = info.wenjianwei;
-			info.root = root.offset;
+			info.root = root.offset = info.wenjianwei;
 			info.wenjianwei += sizeof(mid);
 			info.head = info.wei = ye.offset = info.wenjianwei;
 			info.wenjianwei += sizeof(yezi);
@@ -1168,7 +1167,7 @@ namespace sjtu
 			for (j = i + 1; j < ye.geshu; ++j)
 			{
 				ye.a[j - 1].first = ye.a[j].first;
-				ye.a[j - 1].second = ye.a[j - 1].second;
+				ye.a[j - 1].second = ye.a[j].second;
 			}
 			ye.geshu--;
 			size_t midoffset = ye.par;
