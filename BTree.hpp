@@ -1,7 +1,6 @@
 //
 // Created by 郑文鑫 on 2019-03-09.
 //
-
 #include "utility.hpp"
 #include <functional>
 #include <cstddef>
@@ -12,14 +11,15 @@ namespace sjtu
     template <class Key, class Value, class Compare = std::less<Key> >
 	class BTree {
 	public:
-		typedef pair<const Key, Value> value_type;
-		int M = 2000;
-		int N = 200;
-		int Mmin = 1000;
-		int Nmin = 100;
-		int pos = 0;
+		typedef pair<Key, Value> value_type;
+		static const int M = 2000;
+	   	static const int N = 200;
+		static const int Mmin = 1000;
+		static const int Nmin = 100;
+		int wenjianpos = 0;
 		class yezi
 		{
+		public:
 			int offset;
 			int par;
 			int pre;
@@ -29,7 +29,7 @@ namespace sjtu
 			yezi()
 			{
 				offset = 0;
-				fu = 0;
+				par = 0;
 				pre = 0;
 				next = 0;
 				geshu = 0;
@@ -37,6 +37,7 @@ namespace sjtu
 		};
 		class mid
 		{
+		public:
 			int offset;
 			int par;
 			int geshu;
@@ -46,9 +47,10 @@ namespace sjtu
 			mid()
 			{
 				offset = 0;
-				fu = 0;
+				par = 0;
 				geshu = 0;
 				bz = false;
+				int i;
 				for (i = 0; i <= M; ++i)
 				{
 					erzi[i] = 0;
@@ -57,7 +59,7 @@ namespace sjtu
 		};
 		class xinxi
 		{
-
+		public:
 			int head;
 			int wei;
 			int size;
@@ -74,10 +76,17 @@ namespace sjtu
 		};
 		class name
 		{
+		public:
 			char* ch;
 			name()
 			{
 				ch = new char[10];
+				ch[0] = 'b';
+				ch[1] = 'b';
+				ch[2] = 'p';
+				ch[3] = 'p';
+				ch[4] = 't';
+				ch[5] = '\0';
 			}
 			~name()
 			{
@@ -101,11 +110,11 @@ namespace sjtu
 		bool flag;
 		name prefilename;
 		FILE* prefile;
-		int tmp;
-		void dakai()
+		int yeoftp;
+		inline void dakai()
 		{
 			flag = true;
-			if (kai == 0)
+			if (kai == false)
 			{
 				wenjian = fopen(filename.ch, "rb+");
 				if (wenjian == NULL)
@@ -113,16 +122,16 @@ namespace sjtu
 					flag = false;
 					wenjian = fopen(filename.ch, "w");
 					fclose(wenjian);
-					fp = fopen(filename.ch, "rb+");
+					wenjian = fopen(filename.ch, "rb+");
 				}
 				else
 				{
-					du(&info, pos, 1, sizeof(xinxi));
+					du(&info, wenjianpos, 1, sizeof(xinxi));
 				}
 				kai = true;
 			}
 		}
-		void guanbi()
+		inline void guanbi()
 		{
 			if (kai == 1)
 			{
@@ -130,37 +139,37 @@ namespace sjtu
 				kai = false;
 			}
 		}
-		void du(void* dizhi, int offset, int num, int size)
+		inline void du(void* dizhi, int offset, int num, int size)
 		{
 			if (fseek(wenjian, offset, SEEK_SET)) throw "tmd da bu kai";
 			fread(dizhi, size, num, wenjian);
 		}
-		 void xie(void* dizhi, int offset, int num, int size)
+		inline void xie(void* dizhi, int offset, int num, int size)
 		{
 			if (fseek(wenjian, offset, SEEK_SET)) throw "tmd da bu kai";
 			fwrite(dizhi, size, num, wenjian);
 		}
-		 void copydufile(void* dizhi, int offset, int num, int size)
+		inline void copydufile(void* dizhi, int offset, int num, int size)
 		{
 			if (fseek(prefile, offset, SEEK_SET)) throw "tmd da bu kai";
-			int x = fread(dizhi, num, size, prefile);
+			fread(dizhi, num, size, prefile);
 		}
-		 void copyyezi(int offset, int preoffset, int paroffset)
+		inline void copyyezi(int offset, int preoffset, int paroffset)
 		{
 			yezi ye;
 			yezi preye;
 			yezi fromye;
 			copydufile(&fromye, preoffset, 1, sizeof(yezi));
 			ye.offset = offset;
-			ye.par = paroffsset;
+			ye.par = paroffset;
 			ye.geshu = fromye.geshu;
-			ye.pre = tmp;
+			ye.pre = yeoftp;
 			ye.next = 0;
-			if (tmp != 0)
+			if (yeoftp != 0)
 			{
-				du(&preye, tmp, 1, sizeof(yezi));
+				du(&preye, yeoftp, 1, sizeof(yezi));
 				preye.next = offset;
-				xie(&preye, tmp, 1, sizeof(ye));
+				xie(&preye, yeoftp, 1, sizeof(yezi));
 				info.wei = offset;
 			}
 			else
@@ -174,9 +183,9 @@ namespace sjtu
 			}
 			xie(&ye, offset, 1, sizeof(yezi));
 			info.wenjianwei += sizeof(yezi);
-			tmp = offset;
+			yeoftp = offset;
 		}
-		 void copynode(int offset, int fromoffset, int paroffset)
+		inline void copynode(int offset, int fromoffset, int paroffset)
 		{
 			mid node, fromnode;
 			copydufile(&fromnode, fromoffset, 1, sizeof(mid));
@@ -186,6 +195,7 @@ namespace sjtu
 			node.par = paroffset;
 			node.geshu = fromnode.geshu;
 			node.bz = fromnode.bz;
+			int i;
 			for (i = 0; i < node.geshu; ++i)
 			{
 				node.key[i] = fromnode.key[i];
@@ -200,20 +210,19 @@ namespace sjtu
 			}
 			xie(&node, offset, 1, sizeof(mid));
 		}
-		 void copyfile(char* mo, char* qi)
+		inline void copyfile(char* mo, char* qi)
 		{
 			xinxi infor;
 			prefilename.qiming(qi);
 			prefile = fopen(prefilename.ch, "rb+");
 			if (prefile == NULL) throw "mei zhe wan yi";
-			copydufile(&infor, pos, 1, sizeof(xinxi));
-			tmp = 0;
+			copydufile(&infor, wenjianpos, 1, sizeof(xinxi));
+			yeoftp = 0;
 			info.size = infor.size;
-			info.wenjianwei = sizeof(xinxi);
-			info.root = info.wenjianwei;
-			xie(&info, pos, 1, sizeof(xinxi));
+			info.wenjianwei = info.root = sizeof(xinxi);
+			xie(&info, wenjianpos, 1, sizeof(xinxi));
 			copynode(info.root, infor.foot, 0);
-			xie(&info, pos, 1, sizeof(xinxi));
+			xie(&info, wenjianpos, 1, sizeof(xinxi));
 			fclose(prefile);
 		}
         class const_iterator;
@@ -245,7 +254,7 @@ namespace sjtu
 				offset = other.offset;
 				weizhi = other.weizhi;
 			}
-			iterator(BTree zuzong, int zoffset = 0, int zweizhi = 0)
+			iterator(BTree * zuzong, int zoffset = 0, int zweizhi = 0)
 			{
 				bpshu = zuzong;
 				offset = zoffset;
@@ -382,13 +391,13 @@ namespace sjtu
 				offset = other.offset;
 				weizhi = other.weizhi;
 			}
-			const_iterator(const iterator& other)
+			const_iterator(const const_iterator& other)
 			{
 				bpshu = other.bpshu;
 				offset = other.offset;
 				weizhi = other.weizhi;
 			}
-			const_iterator(BTree zuzong, int zoffset = 0, int zweizhi = 0)
+			const_iterator(BTree *zuzong, int zoffset = 0, int zweizhi = 0)
 			{
 				bpshu = zuzong;
 				offset = zoffset;
@@ -503,26 +512,39 @@ namespace sjtu
 				return p.a[weizhi].second;
 			}
         };
-		int posyezi(Key& key, int offset)
+		int posyezi(const Key& key, int offset)
 		{
 			mid p;
 			du(&p, offset, 1, sizeof(mid));
 			if (p.bz == true)
 			{
 				int i = 0;
-				while (i < p.geshu)
-				{
-					if (key < p.key[i]) break;
-					++i;
-				}
+				for (; i < p.geshu; ++i) if (key < p.key[i]) break;
 				if (i == 0) return 0;
 				else
 				{
-					return posyezi(key, p.erzi[i - 1]);
+					return p.erzi[i - 1];
 				}
 			}
+			else
+			{
+				int i = 0;
+				for (; i < p.geshu; ++i)
+				{
+					if (key < p.key[i]) break;
+				}
+				if (i == 0)
+				{
+					return 0;
+				}
+				else
+				{
+					return posyezi(key, p.key[i - 1]);
+				}
+			}
+			
 		}
-		pair<iterator, OperationResult> charuyezi(yezi& ye, Key& key, Value& value)
+		pair<iterator, OperationResult> charuyezi(yezi& ye,const Key& key,const Value& value)
 		{
 			iterator fz;
 			int i,j;
@@ -543,12 +565,12 @@ namespace sjtu
 			fz.bpshu = this;
 			fz.weizhi = i;
 			fz.offset = ye.offset;
-			xie(&info, pos, 1, sizeof(yezi));
-			if (ye.geshu <= L) xie(&ye, ye.offset, 1, sizeof(yezi));
+			xie(&info, wenjianpos, 1, sizeof(xinxi));
+			if (ye.geshu <= N) xie(&ye, ye.offset, 1, sizeof(yezi));
 			else fenyezi(ye, fz, key);
 			return pair <iterator, OperationResult>(fz, Success);
 		}
-		void charunode(mid& node, Key& key, int erzi)
+		void charunode(mid& node,const Key& key, int erzi)
 		{
 			int i;
 			for (i = 0; i < node.geshu; ++i)
@@ -567,13 +589,13 @@ namespace sjtu
 			if (node.geshu <= M) xie(&node, node.offset, 1, sizeof(mid));
 			else fenmid(node);
 		}
-		void fenyezi(yezi& ye, iterator& t, Key& key)
+		void fenyezi(yezi& ye, iterator& t,const Key& key)
 		{
 			yezi newye;
 			newye.geshu = ye.geshu - ye.geshu / 2;
 			ye.geshu /= 2;
 			newye.offset = info.wenjianwei;
-			info.weijianwei += sizeof(yezi);
+			info.wenjianwei += sizeof(yezi);
 			newye.par = ye.par;
 			int i;
 			for (i = 0; i < newye.geshu; ++i)
@@ -599,7 +621,7 @@ namespace sjtu
 			}
 			xie(&ye, ye.offset, 1, sizeof(yezi));
 			xie(&newye, newye.offset, 1, sizeof(yezi));
-			xie(&info, pos, 1, sizeof(xinxi));
+			xie(&info, wenjianpos, 1, sizeof(xinxi));
 			mid par;
 			du(&par, ye.par, 1, sizeof(mid));
 			charunode(par, newye.a[0].first, newye.offset);
@@ -651,14 +673,14 @@ namespace sjtu
 				node.par = newroot.offset;
 				newnode.par = newroot.offset;
 				info.root = newroot.offset;
-				xie(&info, pos, 1, sizeof(xinxi));
-				xie(&node, node, offset, 1, sizeof(mid));
+				xie(&info, wenjianpos, 1, sizeof(xinxi));
+				xie(&node, node.offset, 1, sizeof(mid));
 				xie(&newnode, newnode.offset, 1, sizeof(mid));
 				xie(&newroot, newroot.offset, 1, sizeof(mid));
 			}
 			else
 			{
-				xie(&info, pos, 1, sizeof(xinxi));
+				xie(&info, wenjianpos, 1, sizeof(xinxi));
 				xie(&node, node.offset, 1, sizeof(mid));
 				xie(&newnode, newnode.offset, 1, sizeof(mid));
 				mid parent;
@@ -666,13 +688,13 @@ namespace sjtu
 				charunode(parent, newnode.key[0], newnode.offset);
 			}
 		}
-		OperationResult qiangyou(yezi &ye)
+		OperationResult qiangyou(yezi ye)
 		{
 			if (ye.next == 0) return Fail;
 			yezi right;
 			du(&right, ye.next, 1, sizeof(yezi));
-			if (ye.par != right.par) return fail;
-			if (right.geshu <= Nmin) return fail;
+			if (ye.par != right.par) return Fail;
+			if (right.geshu <= Nmin) return Fail;
 			Key oldkey;
 			Key newkey;
 			oldkey = right.a[0].first;
@@ -755,18 +777,17 @@ namespace sjtu
 			if (right.offset == info.wei)
 			{
 				info.wei = ye.offset;
-				xie(&info, pos, 1, sizeof(xinxi));
+				xie(&info, wenjianpos, 1, sizeof(xinxi));
 			}
 			else
 			{
-				ye p;
+				yezi p;
 				du(&p, ye.next, 1, sizeof(yezi));
 				p.pre = ye.offset;
 				xie(&p, p.offset, 1, sizeof(yezi));
 			}
 			mid node;
 			du(&node, ye.par, 1, sizeof(mid));
-			int i;
 			for (i = 0; i < node.geshu; ++i)
 			{
 				if (node.key[i] == right.a[0].first) break;
@@ -806,18 +827,17 @@ namespace sjtu
 			if (ye.offset == info.wei)
 			{
 				info.wei = left.offset;
-				xie(&info, pos, 1, sizeof(xinxi));
+				xie(&info, wenjianpos, 1, sizeof(xinxi));
 			}
 			else
 			{
-				ye p;
+				yezi p;
 				du(&p, left.next, 1, sizeof(yezi));
 				p.pre = left.offset;
 				xie(&p, p.offset, 1, sizeof(yezi));
 			}
 			mid node;
 			du(&node, left.par, 1, sizeof(mid));
-			int i;
 			for (i = 0; i < node.geshu; ++i)
 			{
 				if (node.key[i] == ye.a[0].first) break;
@@ -825,8 +845,8 @@ namespace sjtu
 			int j;
 			for (j = i; j < node.geshu - 1; ++j)
 			{
-				node.key[i] = node.key[i + 1];
-				node.erzi[i] = node.erzi[i + 1];
+				node.key[j] = node.key[j + 1];
+				node.erzi[j] = node.erzi[j + 1];
 			}
 			node.geshu--;
 			xie(&left, left.offset, 1, sizeof(yezi));
@@ -866,7 +886,7 @@ namespace sjtu
 			{
 				info.root = node.offset;
 				node.par = 0;
-				xie(&info, pos, 1, sizeof(xinxi));
+				xie(&info, wenjianpos, 1, sizeof(xinxi));
 				xie(&node, node.offset, 1, sizeof(mid));
 			}
 			else
@@ -897,7 +917,6 @@ namespace sjtu
 			{
 				if (parent.erzi[i] == node.offset) break;
 			}
-			if (i == parent.geshu) throw "bao le";
 			if (i == parent.geshu - 1) return Fail;
 			mid right;
 			du(&right, parent.erzi[i + 1], 1, sizeof(mid));
@@ -1032,12 +1051,11 @@ namespace sjtu
 			{
 				if (par.erzi[i] == node.offset) break;
 			}
-			if (i == par.geshu) throw "bao le";
 			if (i == 0) return Fail;
 			mid left;
 			du(&left, par.erzi[i-1], 1, sizeof(mid));
 			int j;
-			for (j = 0; j < right.geshu; ++j)
+			for (j = 0; j < node.geshu; ++j)
 			{
 				left.key[left.geshu] = node.key[j];
 				left.erzi[left.geshu] = node.erzi[j];
@@ -1077,7 +1095,7 @@ namespace sjtu
 			root.offset = info.wenjianwei;
 			info.root = root.offset;
 			info.wenjianwei += sizeof(mid);
-			info.head = info.wei = ye.offset = info.eof;
+			info.head = info.wei = ye.offset = info.wenjianwei;
 			info.wenjianwei += sizeof(yezi);
 			root.par = 0;
 			root.geshu = 1;
@@ -1086,24 +1104,21 @@ namespace sjtu
 			ye.par = root.offset;
 			ye.next = ye.pre = 0;
 			ye.geshu = 0;
-			xie(&info, pos, 1, sizeof(xinxi));
+			xie(&info, wenjianpos, 1, sizeof(xinxi));
 			xie(&root, root.offset, 1, sizeof(mid));
-			xie(&ye, ye.offset, 1, sizeof(ye));
+			xie(&ye, ye.offset, 1, sizeof(yezi));
 		}
         // Default Constructor and Copy Constructor
         BTree() {
-			filename.ch = "bpt";
 			wenjian = NULL;
 			dakai();
 			if (flag == false) buildtree();
         }
         BTree(const BTree& other) {
-			filename.ch = "bpt";
 			dakai();
 			copyfile(filename.ch, other.filename.ch);
         }
         BTree& operator=(const BTree& other) {
-			filename.ch = "bpt";
 			dakai();
 			copyfile(filename.ch, other.filename.ch);
         }
@@ -1151,7 +1166,7 @@ namespace sjtu
 			}
 			if (i == ye.geshu) return Fail;
 			int j;
-			for (j = pos + 1; j < ye.geshu; ++j)
+			for (j = i + 1; j < ye.geshu; ++j)
 			{
 				ye.a[j - 1].first = ye.a[j].first;
 				ye.a[j - 1].second = ye.a[j - 1].second;
@@ -1173,7 +1188,7 @@ namespace sjtu
 				midoffset = node.par;
 			}
 			info.size--;
-			xie(&info, pos, 1, sizeof(xinxi));
+			xie(&info, wenjianpos, 1, sizeof(xinxi));
 			if (ye.geshu < Nmin)
 			{
 				tiaoye(ye);
@@ -1193,12 +1208,12 @@ namespace sjtu
         iterator end() {
 			yezi wei;
 			du(&wei, info.wei, 1, sizeof(yezi));
-			return iterator(this, info.tail, tail.geshu);
+			return iterator(this, info.wei, wei.geshu);
 		}
         const_iterator cend() const {
 			yezi wei;
 			du(&wei, info.wei, 1, sizeof(yezi));
-			return const_iterator(this, info.tail, tail.geshu);
+			return const_iterator(this, info.wei, wei.geshu);
 		}
         // Check whether this BTree is empty
         bool empty() const {
@@ -1234,7 +1249,7 @@ namespace sjtu
          * The default method of check the equivalence is !(a < b || b > a)
          */
         size_t count(const Key& key) const {
-			return static_cast<size_t> {find(key) != iterator(NULL); }
+			return static_cast<size_t> (find(key) != iterator(NULL)); 
 		}
         /**
          * Finds an element with key equivalent to key.
