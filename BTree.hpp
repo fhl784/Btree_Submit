@@ -95,12 +95,11 @@ namespace sjtu
 			void qiming(char* str)
 			{
 				size_t i = 0;
-				while (str[i] != '\0')
+				for (; str[i]; ++i)
 				{
 					ch[i] = str[i];
-					i++;
 				}
-				ch[i] = '\0';
+				ch[i] = 0;
 			}
 		};
 		FILE* wenjian;
@@ -795,8 +794,8 @@ namespace sjtu
 			size_t j;
 			for (j = i; j < node.geshu - 1; ++j)
 			{
-				node.key[i] = node.key[i + 1];
-				node.erzi[i] = node.erzi[i + 1];
+				node.key[j] = node.key[j + 1];
+				node.erzi[j] = node.erzi[j + 1];
 			}
 			node.geshu--;
 			xie(&ye, ye.offset, 1, sizeof(yezi));
