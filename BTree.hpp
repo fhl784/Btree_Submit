@@ -261,7 +261,7 @@ namespace sjtu
 				weizhi = zweizhi;
 			}
             // Return a new iterator which points to the n-next elements
-            iterator operator++(size_t) {
+            iterator operator++(int) {
 				iterator tmp = *this;
 				if (tmp == bpshu->end()) {
 					bpshu = NULL;
@@ -305,7 +305,7 @@ namespace sjtu
 				else weizhi++;
 				return *this;
             }
-            iterator operator--(size_t) {
+            iterator operator--(int) {
 				iterator tmp = *this;
 				if (tmp == bpshu->begin())
 				{
@@ -404,7 +404,7 @@ namespace sjtu
 				weizhi = zweizhi;
 			}
 			// Return a new iterator which points to the n-next elements
-			const_iterator operator++(size_t) {
+			const_iterator operator++(int) {
 				const_iterator tmp = *this;
 				if (tmp == bpshu->cend()) {
 					bpshu = NULL;
@@ -448,7 +448,7 @@ namespace sjtu
 				else weizhi++;
 				return *this;
 			}
-			const_iterator operator--(size_t) {
+			const_iterator operator--(int) {
 				const_iterator tmp = *this;
 				if (tmp == bpshu->cbegin())
 				{
