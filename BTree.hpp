@@ -101,6 +101,11 @@ namespace sjtu
 				}
 				ch[i] = 0;
 			}
+			void qiming(int x)
+			{
+				ch[0] = 'f';
+				ch[1] = '\0';
+			}
 		};
 		FILE* wenjian;
 		bool kai;
@@ -1108,15 +1113,18 @@ namespace sjtu
 		}
         // Default Constructor and Copy Constructor
         BTree() {
+			filename.qiming(0);
 			wenjian = NULL;
 			dakai();
 			if (flag == false) buildtree();
         }
         BTree(const BTree& other) {
+			filename.qiming(0);
 			dakai();
 			copyfile(filename.ch, other.filename.ch);
         }
         BTree& operator=(const BTree& other) {
+			filename.qiming(0);
 			dakai();
 			copyfile(filename.ch, other.filename.ch);
         }
