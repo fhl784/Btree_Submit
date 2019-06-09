@@ -1,1051 +1,977 @@
-# include "utility.hpp"
-# include <fstream>
-# include <functional>
-# include <cstddef>
-# include "exception.hpp"
-
+#include "utility.hpp"
+#include <functional>
+#include <cstddef>
+#include "exception.hpp"
+#include <cstdio>
 namespace sjtu {
+	template <class Key, class Value>
+	constexpr size_t kuaidaxiao() {
+		size_t cur_size = 2048;
+		for (; cur_size < (sizeof(Key) + sizeof(Value)) * 8; cur_size *= 2);
+		return cur_size;
+	}
+	constexpr char BPTREE_ADDRESS[50] = "bpt";
 	template <class Key, class Value, class Compare = std::less<Key> >
 	class BTree {
-	public:
-		typedef pair <Key, Value> value_type;
-		class iterator;
-		class const_iterator;
 	private:
-		static const int M = (4079 / (sizeof(size_t) + sizeof(Key))) < 5 ? 4 : (4079 / (sizeof(size_t) + sizeof(Key)) - 1);           //from fhj
-		static const int N = (4076 / (sizeof(value_type))) < 5 ? 4 : (4076 / (sizeof(value_type)) - 1);                               //from fhj
-		static const int Mmin = M/2;
-		static const int Nmin = N/2;
-		static const int infopos = 0;
-		struct mingzi {
-			char* erzi;
-			mingzi() { erzi = new char[10]; }
-			~mingzi() { if (erzi != nullptr) delete erzi; }
-			void qiming(int x) {
-				erzi[0] = 'f';
-				erzi[1] = '\0';
-			}
-			void qiming(char* str) {
-				int j = 0;
-				for (; str[j]; ++j) erzi[j] = str[j];
-				erzi[j] = 0;
-			}
+		class xinxi {
+		public:
+			bool bz = false;
+			size_t geshu = 0;
+			size_t weizhi = 0;
+			size_t fu = 0;
+			size_t wei = 0;
+			size_t next = 0;
 		};
-		struct xinxi {
-			size_t head;
-			size_t wei;
-			size_t root;
-			size_t size;
-			size_t wenjianwei;
-			xinxi() {
-				head = 0;
-				wei = 0;
-				root = 0;
-				size = 0;
-				wenjianwei = 0;
-			}
+		struct shujunode {
+			size_t erzi = 0;
+			Key dkey;
 		};
-		struct yezi {
-			size_t offset;
-			size_t par;
-			size_t pre;
-			size_t next;
-			int geshu;
-			value_type a[N + 1];
-			yezi() {
-				offset = 0;
-				par = 0;
-				pre = 0;
-				next = 0;
-				geshu = 0;
-			}
+		constexpr static size_t dakuaisize = kuaidaxiao<Key, Value>();
+		constexpr static size_t xinxisize = sizeof(xinxi);
+		constexpr static size_t keysize = sizeof(Key);
+		constexpr static size_t valuesize = sizeof(Value);
+		constexpr static size_t keygeshu = (dakuaisize - xinxisize) / sizeof(shujunode) - 1;
+		constexpr static size_t pairgeshu = (dakuaisize - xinxisize) / (keysize + valuesize) - 1;
+		class ffile {
+		public:
+			size_t kuaicnt = 1;
+			size_t rootpos = 0;
+			size_t kuaitou = 0;
+			size_t kuaiwei = 0;
+			size_t geshu = 0;
+		};
+		class shuju {
+		public:
+			shujunode a[keygeshu];
 		};
 
-		struct mid {
-			size_t offset;
-			size_t par;
-			size_t erzi[M + 1];
-			Key key[M + 1];
-			int geshu;
-			bool bz;
-			mid() {
-				offset = 0;
-				par = 0;
-				for (int j = 0; j <= M; ++j) erzi[j] = 0;
-				geshu = 0;
-				bz = 0;
-			}
+		class yezishuju {
+		public:
+			pair<Key, Value> a[pairgeshu];
 		};
-		FILE* wenjian;
-		bool kai;
-		mingzi filename;
-		xinxi info;
-		bool flag;
-		mingzi prefilename;
-		FILE* prefile;
-		size_t yeoftp;
-		inline void dakai() {
-			flag = 1;
-			if (kai == 0) {
-				wenjian = fopen(filename.erzi, "rb+");
-				if (wenjian == nullptr) {
-					flag = 0;
-					wenjian = fopen(filename.erzi, "w");
-					fclose(wenjian);
-					wenjian = fopen(filename.erzi, "rb+");
-				}
-				else du(&info, infopos, 1, sizeof(xinxi));
-				kai = 1;
+		ffile bptr;
+		static FILE* wenjian;
+		template <class MEM_TYPE>
+		static void memdu(MEM_TYPE fz, size_t fzsize, size_t fzpos) {
+			fseek(wenjian, long(fzsize * fzpos), SEEK_SET);
+			fread(fz, fzsize, 1, wenjian);
+		}
+		template <class MEM_TYPE>
+		static void memxie(MEM_TYPE fz, size_t fzsize, size_t fzpos) {
+			fseek(wenjian, long(fzsize * fzpos), SEEK_SET);
+			fwrite(fz, fzsize, 1, wenjian);
+			fflush(wenjian);
+		}
+		void xiexinxi() {
+			fseek(wenjian, 0, SEEK_SET);
+			char fz[dakuaisize] = { 0 };
+			memcpy(fz, &bptr, sizeof(bptr));
+			memxie(fz, dakuaisize, 0);
+		}
+		size_t memfenpei() {
+			++bptr.kuaicnt;
+			char fz[dakuaisize] = { 0 };
+			memxie(fz, dakuaisize, bptr.kuaicnt - 1);
+			return bptr.kuaicnt - 1;
+		}
+		size_t jianmid(size_t fu) {
+			auto midpos = memfenpei();
+			xinxi temp;
+			shuju sj;
+			temp.bz = false;
+			temp.fu = fu;
+			temp.weizhi = midpos;
+			temp.geshu = 0;
+			xienode(&temp, &sj, midpos);
+			return midpos;
+		}
+		size_t jianyenode(size_t fu, size_t wei, size_t next) {
+			auto midpos = memfenpei();
+			xinxi temp;
+			yezishuju yesj;
+			temp.bz = true;
+			temp.fu = fu;
+			temp.weizhi = midpos;
+			temp.wei = wei;
+			temp.next = next;
+			temp.geshu = 0;
+			xienode(&temp, &yesj, midpos);
+			return midpos;
+		}
+		void charubz(xinxi & infor, shuju & parsj,size_t zuzong, size_t xinpos, const Key & xinbz) {
+			++infor.geshu;
+			auto p = infor.geshu - 2;
+			for (; parsj.a[p].erzi != zuzong; --p) {
+				parsj.a[p + 1] = parsj.a[p];
 			}
+			parsj.a[p + 1].dkey = parsj.a[p].dkey;
+			parsj.a[p].dkey = xinbz;
+			parsj.a[p + 1].erzi = xinpos;
 		}
-		inline void guanbi() {
-			if (kai == 1) {
-				fclose(wenjian);
-				kai = 0;
-			}
+		template <class shujuzhonglei>
+		static void xienode(xinxi * infor, shujuzhonglei * nodeshu, size_t weizhi) {
+			char fz[dakuaisize] = { 0 };
+			memcpy(fz, infor, sizeof(xinxi));
+			memcpy(fz + xinxisize, nodeshu, sizeof(shujuzhonglei));
+			memxie(fz, dakuaisize, weizhi);
 		}
-		inline void du(void* weizhi, size_t offset, size_t num, size_t size) const {
-			fread(weizhi, size, num, wenjian);
+		template <class shujuzhonglei>
+		static void dunode(xinxi * infor, shujuzhonglei * nodeshu, size_t weizhi) {
+			char fz[dakuaisize] = { 0 };
+			memdu(fz, dakuaisize, weizhi);
+			memcpy(infor, fz, sizeof(xinxi));
+			memcpy(nodeshu, fz + xinxisize, sizeof(shujuzhonglei));
 		}
-		inline void xie(void* weizhi, size_t offset, size_t num, size_t size) const {
-			fwrite(weizhi, size, num, wenjian);
-		}
-		inline void copydufile(void* weizhi, size_t offset, size_t num, size_t size) const {
-			if (fseek(prefile, offset, SEEK_SET)) throw "open file failed";
-			size_t fz = fread(weizhi, num, size, prefile);
-		}
-		inline void copyye(size_t offset, size_t fromoffset, size_t paroffset) {
-			yezi ye, fromye, preye;
-			copydufile(&fromye, fromoffset, 1, sizeof(yezi));
-			ye.offset = offset;
-			ye.par = paroffset;
-			ye.geshu = fromye.geshu;
-			ye.pre = yeoftp;
-			ye.next = 0;
-			if (yeoftp != 0) {
-				du(&preye, yeoftp, 1, sizeof(yezi));
-				preye.next = offset;
-				xie(&preye, yeoftp, 1, sizeof(yezi));
-				info.wei = offset;
-			}
-			else info.head = offset;
-			for (int j = 0; j < ye.geshu; ++j)
-			{
-				ye.a[j].first = fromye.a[j].first;
-				ye.a[j].second = fromye.a[j].second;
-			}
-			xie(&ye, offset, 1, sizeof(yezi));
-			info.wenjianwei += sizeof(yezi);
-			yeoftp = offset;
-		}
-		inline void copymid(size_t offset, size_t fromoffset, size_t paroffset) {
-			mid node, fromnode;
-			copydufile(&fromnode, fromoffset, 1, sizeof(mid));
-			xie(&node, offset, 1, sizeof(mid));
-			info.wenjianwei += sizeof(mid);
-			node.offset = offset; node.par = paroffset;
-			node.geshu = fromnode.geshu; node.bz = fromnode.bz;
-			for (int j = 0; j < node.geshu; ++j) {
-				node.key[j] = fromnode.key[j];
-				if (node.bz == 1) {
-					copyye(info.wenjianwei, fromnode.erzi[j], offset);
-				}
-				else {
-					copymid(info.wenjianwei, fromnode.erzi[j], offset);
-				}
-			}
-			xie(&node, offset, 1, sizeof(mid));
-		}
-		inline void copyfile(char* mo, char* qi) {
-			prefilename.qiming(qi);
-			prefile = fopen(prefilename.erzi, "rb+");
-			if (prefile == nullptr) throw "no such file";
+		Key fenlieyezi(size_t fzpos, xinxi & fuinfo, yezishuju & fushuju) {
+			size_t fuweizhi;
 			xinxi infor;
-			copydufile(&infor, infopos, 1, sizeof(xinxi));
-			yeoftp = 0; info.size = infor.size;
-			info.root = info.wenjianwei = sizeof(xinxi);
-			xie(&info, infopos, 1, sizeof(xinxi));
-			copymid(info.root, infor.root, 0);
-			xie(&info, infopos, 1, sizeof(xinxi));
-			fclose(prefile);
-		}
-		inline void buildtree() {
-			info.size = 0;
-			info.wenjianwei = sizeof(xinxi);
-			mid root;
-			yezi ye;
-			info.root = root.offset = info.wenjianwei;
-			info.wenjianwei += sizeof(mid);
-			info.head = info.wei = ye.offset = info.wenjianwei;
-			info.wenjianwei += sizeof(yezi);
-			root.par = 0; root.geshu = 1; root.bz = 1;
-			root.erzi[0] = ye.offset;
-			ye.par = root.offset;
-			ye.next = ye.pre = 0;
-			ye.geshu = 0;
-			xie(&info, infopos, 1, sizeof(xinxi));
-			xie(&root, root.offset, 1, sizeof(mid));
-			xie(&ye, ye.offset, 1, sizeof(yezi));
-		}
-		size_t posyezi(const Key & key, size_t offset) const {
-			mid p;
-			du(&p, offset, 1, sizeof(mid));
-			if (p.bz == 1) {
-				int i = 0;
-				for (; i < p.geshu; ++i)
-					if (key < p.key[i]) break;
-				if (i == 0) return 0;
-				return p.erzi[i - 1];
+			shuju parsj;
+			if (fzpos == bptr.rootpos) {
+				auto rootpos = jianmid(0);
+				bptr.rootpos = rootpos;
+				dunode(&infor, &parsj, rootpos);
+				fuinfo.fu = rootpos;
+				++infor.geshu;
+				parsj.a[0].erzi = fzpos;
+				fuweizhi = rootpos;
 			}
 			else {
-				int i = 0;
-				for (; i < p.geshu; ++i)
-					if (key < p.key[i]) break;
-				if (i == 0) return 0;
-				return posyezi(key, p.erzi[i - 1]);
+				dunode(&infor, &parsj, fuinfo.fu);
+				fuweizhi = infor.weizhi;
 			}
+			if (jianchafu(fuinfo)) {
+				fuweizhi = fuinfo.fu;
+				dunode(&infor, &parsj, fuweizhi);
+			}
+			auto xinpos = jianyenode(fuweizhi, fzpos, fuinfo.next);
+			auto tmppos = fuinfo.next;
+			xinxi tmpxinxi;
+			yezishuju tmpshuju;
+			dunode(&tmpxinxi, &tmpshuju, tmppos);
+			tmpxinxi.wei = xinpos;
+			xienode(&tmpxinxi, &tmpshuju, tmppos);
+			fuinfo.next = xinpos;
+			xinxi xininfor;
+			yezishuju xinshuju;
+			dunode(&xininfor, &xinshuju, xinpos);
+			size_t zhongpos = fuinfo.geshu /2;
+			for (size_t p = zhongpos, i = 0; p < fuinfo.geshu; ++p, ++i) {
+				xinshuju.a[i].first = fushuju.a[p].first;
+				xinshuju.a[i].second = fushuju.a[p].second;
+				++xininfor.geshu;
+			}
+			fuinfo.geshu = zhongpos;
+			charubz(infor, parsj, fzpos, xinpos, fushuju.a[zhongpos].first);
+			xienode(&fuinfo, &fushuju, fzpos);
+			xienode(&xininfor, &xinshuju, xinpos);
+			xienode(&infor, &parsj, fuweizhi);
+			return xinshuju.a[0].first;
 		}
-		pair <iterator, OperationResult> charuyezi(yezi & ye, const Key & key, const Value & value) {
-			iterator fz;
-			int i = 0;
-			for (; i < ye.geshu; ++i) {
-				if (key == ye.a[i].first) return pair <iterator, OperationResult>(iterator(nullptr), Fail);
-				if (key < ye.a[i].first) break;
-			}
-			for (int j = ye.geshu - 1; j >= i; --j)
-			{
-				ye.a[j + 1].first = ye.a[j].first;
-				ye.a[j + 1].second = ye.a[j].second;
-			}
-			ye.a[i].first = key;
-			ye.a[i].second = value;
-			++ye.geshu;
-			++info.size;
-			fz.qi = this;
-			fz.weizhi = i;
-			fz.offset = ye.offset;
-			xie(&info, infopos, 1, sizeof(xinxi));
-			if (ye.geshu <= N) xie(&ye, ye.offset, 1, sizeof(yezi));
-			else fenyezi(ye, fz, key);
-			return pair <iterator, OperationResult>(fz, Success);
-		}
-		void charunode(mid & node, const Key & key, size_t erzi) {
-			int i = 0;
-			for (; i < node.geshu; ++i)
-				if (key < node.key[i]) break;
-			for (int j = node.geshu - 1; j >= i; --j)
-				node.key[j + 1] = node.key[j];
-			for (int j = node.geshu - 1; j >= i; --j)
-				node.erzi[j + 1] = node.erzi[j];
-			node.key[i] = key;
-			node.erzi[i] = erzi;
-			++node.geshu;
-			if (node.geshu <= M) xie(&node, node.offset, 1, sizeof(mid));
-			else fenmid(node);
-
-		}
-		void fenyezi(yezi & ye, iterator & it, const Key & key) {
-			yezi newye;
-			newye.geshu = ye.geshu - ye.geshu / 2;
-			ye.geshu = ye.geshu / 2;
-			newye.offset = info.wenjianwei;
-			info.wenjianwei += sizeof(yezi);
-			newye.par = ye.par;
-			for (int j = 0; j < newye.geshu; ++j) {
-				newye.a[j].first = ye.a[j + ye.geshu].first, newye.a[j].second = ye.a[j + ye.geshu].second;
-				if (newye.a[j].first == key) {
-					it.offset = newye.offset;
-					it.weizhi = j;
-				}
-			}
-			newye.next = ye.next;
-			newye.pre = ye.offset;
-			ye.next = newye.offset;
-			yezi xiaye;
-			if (newye.next == 0) info.wei = newye.offset;
-			else {
-				du(&xiaye, newye.next, 1, sizeof(yezi));
-				xiaye.pre = newye.offset;
-				xie(&xiaye, xiaye.offset, 1, sizeof(yezi));
-			}
-			xie(&ye, ye.offset, 1, sizeof(yezi));
-			xie(&newye, newye.offset, 1, sizeof(yezi));
-			xie(&info, infopos, 1, sizeof(xinxi));
-			mid par;
-			du(&par, ye.par, 1, sizeof(mid));
-			charunode(par, newye.a[0].first, newye.offset);
-		}
-		void fenmid(mid & node) {
-			mid newnode;
-			newnode.geshu = node.geshu - (node.geshu >> 1);
-			node.geshu >>= 1;
-			newnode.par = node.par;
-			newnode.bz = node.bz;
-			newnode.offset = info.wenjianwei;
-			info.wenjianwei += sizeof(mid);
-			for (int j = 0; j < newnode.geshu; ++j)
-				newnode.key[j] = node.key[j + node.geshu];
-			for (int j = 0; j < newnode.geshu; ++j)
-				newnode.erzi[j] = node.erzi[j + node.geshu];
-			yezi ye;
-			mid zhong;
-			for (int j = 0; j < newnode.geshu; ++j) {
-				if (newnode.bz == 1) {
-					du(&ye, newnode.erzi[j], 1, sizeof(yezi));
-					ye.par = newnode.offset;
-					xie(&ye, ye.offset, 1, sizeof(yezi));
-				}
-				else {
-					du(&zhong, newnode.erzi[j], 1, sizeof(mid));
-					zhong.par = newnode.offset;
-					xie(&zhong, zhong.offset, 1, sizeof(mid));
-				}
-			}
-			if (node.offset == info.root) {
-				mid newroot;
-				newroot.par = 0;
-				newroot.bz = 0;
-				newroot.offset = info.wenjianwei;
-				info.wenjianwei += sizeof(mid);
-				newroot.geshu = 2;
-				newroot.key[0] = node.key[0];
-				newroot.erzi[0] = node.offset;
-				newroot.key[1] = newnode.key[0];
-				newroot.erzi[1] = newnode.offset;
-				node.par = newroot.offset;
-				newnode.par = newroot.offset;
-				info.root = newroot.offset;
-				xie(&info, infopos, 1, sizeof(xinxi));
-				xie(&node, node.offset, 1, sizeof(mid));
-				xie(&newnode, newnode.offset, 1, sizeof(mid));
-				xie(&newroot, newroot.offset, 1, sizeof(mid));
+		bool jianchafu(xinxi & erziinfor) {
+			size_t fuweizhi, frompos = erziinfor.fu;
+			xinxi infor, fuinfo;
+			shuju parsj, fushuju;
+			dunode(&fuinfo, &fushuju, frompos);
+			if (fuinfo.geshu < keygeshu)
+				return false;
+			if (frompos == bptr.rootpos) {
+				auto rootpos = jianmid(0);
+				bptr.rootpos = rootpos;
+				dunode(&infor, &parsj, rootpos);
+				fuinfo.fu = rootpos;
+				++infor.geshu;
+				parsj.a[0].erzi = frompos;
+				fuweizhi = rootpos;
 			}
 			else {
-				xie(&info, infopos, 1, sizeof(xinxi));
-				xie(&node, node.offset, 1, sizeof(mid));
-				xie(&newnode, newnode.offset, 1, sizeof(mid));
-				mid par;
-				du(&par, node.par, 1, sizeof(mid));
-				charunode(par, newnode.key[0], newnode.offset);
+				dunode(&infor, &parsj, fuinfo.fu);
+				fuweizhi = infor.weizhi;
 			}
+			if (jianchafu(fuinfo)) {
+				fuweizhi = fuinfo.fu;
+				dunode(&infor, &parsj, fuweizhi);
+			}
+			auto xinpos = jianmid(fuweizhi);
+			xinxi xininfor;
+			shuju xinshuju;
+			dunode(&xininfor, &xinshuju, xinpos);
+			size_t zhongpos = fuinfo.geshu /2;
+			for (size_t p = zhongpos + 1, i = 0; p < fuinfo.geshu; ++p, ++i) {
+				if (fushuju.a[p].erzi == erziinfor.weizhi) {
+					erziinfor.fu = xinpos;
+				}
+				std::swap(xinshuju.a[i], fushuju.a[p]);
+				++xininfor.geshu;
+			}
+			fuinfo.geshu = zhongpos + 1;
+			charubz(infor, parsj, frompos, xinpos, fushuju.a[zhongpos].dkey);
+			xienode(&fuinfo, &fushuju, frompos);
+			xienode(&xininfor, &xinshuju, xinpos);
+			xienode(&infor, &parsj, fuweizhi);
+			return true;
 		}
-		OperationResult qiangyou(yezi ye) {
-			if (ye.next == 0) return Fail;
-			yezi right;
-			du(&right, ye.next, 1, sizeof(yezi));
-			if (ye.par != right.par) return Fail;
-			if (right.geshu <= Nmin) return Fail;
-			Key oldkey, newkey;
-			oldkey = right.a[0].first;
-			newkey = right.a[1].first;
-			ye.a[ye.geshu].first = right.a[0].first;
-			ye.a[ye.geshu].second = right.a[0].second;
-			ye.geshu++;
-			right.geshu--;
-			for (int j = 0; j < right.geshu; ++j)
-			{
-				right.a[j].first = right.a[j + 1].first;
-				right.a[j].second = right.a[j + 1].second;
+		void gaibz(size_t yfu, size_t yerzi, const Key & nkey) {
+			xinxi infor;
+			shuju parsj;
+			dunode(&infor, &parsj, yfu);
+			if (parsj.a[infor.geshu - 1].erzi == yerzi) {
+				gaibz(infor.fu, yfu, nkey);
+				return;
 			}
-			mid node;
-			du(&node, ye.par, 1, sizeof(mid));
-			for (int j = 0; j < node.geshu; ++j) {
-				if (node.key[j] == oldkey) {
-					node.key[j] = newkey;
+			for (size_t curpos = infor.geshu - 2;; --curpos) {
+				if (parsj.a[curpos].erzi == yerzi) {
+					parsj.a[curpos].dkey = nkey;
 					break;
 				}
 			}
-			xie(&node, node.offset, 1, sizeof(mid));
-			xie(&ye, ye.offset, 1, sizeof(yezi));
-			xie(&right, right.offset, 1, sizeof(yezi));
-			return Success;
+			xienode(&infor, &parsj, yfu);
 		}
-		OperationResult qiangzuo(yezi ye) {
-			if (ye.pre == 0) return Fail;
-			yezi left;
-			du(&left, ye.pre, 1, sizeof(yezi));
-			if (ye.par != left.par) return Fail;
-			if (left.geshu <= Nmin) return Fail;
-			Key oldkey, newkey;
-			oldkey = ye.a[0].first;
-			newkey = left.a[left.geshu - 1].first;
-			for (int j = ye.geshu - 1; j >= 0; --j)
-				ye.a[j + 1].first = ye.a[j].first, ye.a[j + 1].second = ye.a[j].second;
-			ye.a[0].first = left.a[left.geshu - 1].first;
-			ye.a[0].second = left.a[left.geshu - 1].second;
-			++ye.geshu;
-			--left.geshu;
-			mid node;
-			du(&node, ye.par, 1, sizeof(mid));
-			for (int j = 0; j < node.geshu; ++j) {
-				if (node.key[j] == oldkey) {
-					node.key[j] = newkey;
-					break;
-				}
+		void hebingbz(xinxi & zuoinfor, shuju & zuoshuju, xinxi & rinfo, shuju & rshuju) {
+			for (size_t p = zuoinfor.geshu, i = 0; i < rinfo.geshu; ++p, ++i) {
+				zuoshuju.a[p] = rshuju.a[i];
 			}
-			xie(&node, node.offset, 1, sizeof(mid));
-			xie(&ye, ye.offset, 1, sizeof(yezi));
-			xie(&left, left.offset, 1, sizeof(yezi));
-			return Success;
+			zuoshuju.a[zuoinfor.geshu - 1].dkey = adjust(rinfo.fu, rinfo.weizhi);
+			zuoinfor.geshu += rinfo.geshu;
+			xienode(&zuoinfor, &zuoshuju, zuoinfor.weizhi);
 		}
-		OperationResult hebingyou(yezi ye) {
-			if (ye.next == 0) return Fail;
-			yezi right;
-			du(&right, ye.next, 1, sizeof(yezi));
-			if (right.par != ye.par) return Fail;
-			for (int j = 0; j < right.geshu; ++j) ye.a[ye.geshu].first = right.a[j].first, ye.a[ye.geshu].second = right.a[j].second, ++ye.geshu;
-			ye.next = right.next;
-			if (right.offset == info.wei) {
-				info.wei = ye.offset;
-				xie(&info, infopos, 1, sizeof(xinxi));
+		void tiaozheng(xinxi & info, shuju & sj) {
+			if (info.geshu >= keygeshu / 2) {
+				xienode(&info, &sj, info.weizhi);
+				return;
 			}
-			else {
-				yezi temp;
-				du(&temp, ye.next, 1, sizeof(yezi));
-				temp.pre = ye.offset;
-				xie(&temp, temp.offset, 1, sizeof(yezi));
+			if (info.weizhi == bptr.rootpos && info.geshu <= 1) {
+				bptr.rootpos = sj.a[0].erzi;
+				return;
 			}
-			mid node;
-			du(&node, ye.par, 1, sizeof(mid));
-			int i = 0;
-			for (; i < node.geshu; ++i)
-				if (node.key[i] == right.a[0].first) break;
-			for (int j = i; j < node.geshu - 1; ++j)
-				node.key[j] = node.key[j + 1], node.erzi[j] = node.erzi[j + 1];
-			node.geshu--;
-			xie(&ye, ye.offset, 1, sizeof(yezi));
-			if (jianchamid(node) == Success) xie(&node, node.offset, 1, sizeof(mid));
-			else tiaonode(node);
-
-			return Success;
-
-		}
-		OperationResult hebingzuo(yezi ye) {
-			if (ye.pre == 0) return Fail;
-			yezi left;
-			du(&left, ye.pre, 1, sizeof(yezi));
-			if (left.par != ye.par) return Fail;
-			for (int j = 0; j < ye.geshu; ++j)
-			{
-				left.a[left.geshu].first = ye.a[j].first;
-				left.a[left.geshu].second = ye.a[j].second;
-				++left.geshu;
+			else if (info.weizhi == bptr.rootpos) {
+				xienode(&info, &sj, info.weizhi);
+				return;
 			}
-			left.next = ye.next;
-			if (info.wei == ye.offset) {
-				info.wei = left.offset;
-				xie(&info, infopos, 1, sizeof(xinxi));
-			}
-			else {
-				yezi temp;
-				du(&temp, left.next, 1, sizeof(yezi));
-				temp.pre = left.offset;
-				xie(&temp, temp.offset, 1, sizeof(yezi));
-			}
-			mid node;
-			du(&node, left.par, 1, sizeof(mid));
-			int i = 0;
-			for (; i < node.geshu; ++i)
-				if (node.key[i] == ye.a[0].first) break;
-			for (int j = i; j < node.geshu - 1; ++j)
-				node.key[j] = node.key[j + 1], node.erzi[j] = node.erzi[j + 1];
-			node.geshu--;
-			xie(&left, left.offset, 1, sizeof(yezi));
-			if (jianchamid(node) == Success) xie(&node, node.offset, 1, sizeof(mid));
-			else tiaonode(node);
-			return Success;
-		}
-		inline OperationResult jianchamid(mid node) {
-			if (node.par == 0) return Success;
-			if (node.geshu >= Mmin) return Success;
-			return Fail;
-		}
-		void tiaoye(yezi ye) {
-			if (qiangyou(ye) == Success) return;
-			if (qiangzuo(ye) == Success) return;
-			if (hebingyou(ye) == Success) return;
-
-			if (hebingzuo(ye) == Success) return;
-
-			xie(&ye, ye.offset, 1, sizeof(yezi));
-
-		}
-		void tiaonode(mid node) {
-			if (qiangyounode(node) == Success) return;
-			if (qiangzuonode(node) == Success) return;
-			if (hebingyounode(node) == Success) return;
-			if (hebingzuonode(node) == Success) return;
-			mid par;
-			du(&par, node.par, 1, sizeof(mid));
-			if (par.par == 0) {
-				info.root = node.offset;
-				node.par = 0;
-				xie(&info, infopos, 1, sizeof(xinxi));
-				xie(&node, node.offset, 1, sizeof(mid));
-			}
-			else {
-				mid ppar;
-				du(&ppar, par.par, 1, sizeof(mid));
-				for (int j = 0; j < ppar.geshu; ++j)
-					if (ppar.erzi[j] == par.offset) {
-						ppar.erzi[j] = node.offset;
-						break;
+			xinxi infor, xdinfor;
+			shuju parsj, xdshuju;
+			dunode(&infor, &parsj, info.fu);
+			size_t valueweizhi;
+			for (valueweizhi = 0; parsj.a[valueweizhi].erzi != info.weizhi; ++valueweizhi);
+			if (valueweizhi > 0) {
+				dunode(&xdinfor, &xdshuju, parsj.a[valueweizhi - 1].erzi);
+				xdinfor.fu = info.fu;
+				if (xdinfor.geshu > keygeshu / 2) {
+					for (size_t p = info.geshu; p > 0; --p) {
+						sj.a[p] = sj.a[p - 1];
 					}
-				node.par = ppar.offset;
-				xie(&ppar, ppar.offset, 1, sizeof(mid));
-				xie(&node, node.offset, 1, sizeof(mid));
-			}
-		}
-		OperationResult qiangyounode(mid node) {
-
-			if (node.par == 0) return Fail;
-			mid par;
-			du(&par, node.par, 1, sizeof(mid));
-			int i = 0;
-			for (; i < par.geshu; ++i)
-				if (par.erzi[i] == node.offset) break;
-			if (i == par.geshu) throw "??";
-			if (i == par.geshu - 1) return Fail;
-			mid right;
-			du(&right, par.erzi[i + 1], 1, sizeof(mid));
-			if (right.geshu <= Mmin) return Fail;
-			node.key[node.geshu] = right.key[0];
-			node.erzi[node.geshu] = right.erzi[0];
-			++node.geshu;
-			for (int j = 0; j < right.geshu - 1; ++j) right.key[j] = right.key[j + 1];
-
-			for (int j = 0; j < right.geshu - 1; ++j) right.erzi[j] = right.erzi[j + 1];
-			--right.geshu;
-			par.key[i + 1] = right.key[0];
-			if (node.bz == 1) {
-				yezi son;
-				du(&son, node.erzi[node.geshu - 1], 1, sizeof(yezi));
-				son.par = node.offset;
-				xie(&son, son.offset, 1, sizeof(yezi));
-			}
-			else {
-				mid son;
-				du(&son, node.erzi[node.geshu - 1], 1, sizeof(mid));
-				son.par = node.offset;
-				xie(&son, son.offset, 1, sizeof(mid));
-			}
-			xie(&node, node.offset, 1, sizeof(mid));
-			xie(&right, right.offset, 1, sizeof(mid));
-			xie(&par, par.offset, 1, sizeof(mid));
-			return Success;
-
-		}
-		OperationResult qiangzuonode(mid node) {
-			if (node.par == 0) return Fail;
-			mid par;
-			du(&par, node.par, 1, sizeof(mid));
-			int i = 0;
-			for (; i < par.geshu; ++i)
-				if (par.erzi[i] == node.offset) break;
-			if (i == par.geshu) throw "??";
-			if (i == 0) return Fail;
-			mid left;
-			du(&left, par.erzi[i - 1], 1, sizeof(mid));
-			if (left.geshu <= Mmin) return Fail;
-			for (int j = node.geshu - 1; j >= 0; --j) node.key[j + 1] = node.key[j];
-			for (int j = node.geshu - 1; j >= 0; --j) node.erzi[j + 1] = node.erzi[j];
-			node.key[0] = left.key[left.geshu - 1];
-			node.erzi[0] = left.erzi[left.geshu - 1];
-			++node.geshu;
-			--left.geshu;
-			par.key[i] = node.key[0];
-			if (node.bz == 1) {
-				yezi son;
-				du(&son, node.erzi[0], 1, sizeof(yezi));
-				son.par = node.offset;
-				xie(&son, son.offset, 1, sizeof(yezi));
-			}
-			else {
-				mid son;
-				du(&son, node.erzi[0], 1, sizeof(mid));
-				son.par = node.offset;
-				xie(&son, son.offset, 1, sizeof(mid));
-			}
-			xie(&node, node.offset, 1, sizeof(mid));
-			xie(&left, left.offset, 1, sizeof(mid));
-			xie(&par, par.offset, 1, sizeof(mid));
-			return Success;
-		}
-		OperationResult hebingyounode(mid node) {
-			if (node.par == 0) return Fail;
-			mid par;
-			du(&par, node.par, 1, sizeof(mid));
-			int i = 0;
-			for (; i < par.geshu; ++i)
-				if (par.erzi[i] == node.offset) break;
-			if (i == par.geshu) throw "...";
-			if (i == par.geshu - 1) return Fail;
-			mid right;
-			du(&right, par.erzi[i + 1], 1, sizeof(mid));
-			for (int j = 0; j < right.geshu; ++j) {
-				node.key[node.geshu] = right.key[j];
-
-				node.erzi[node.geshu] = right.erzi[j];
-				if (node.bz == 1) {
-					yezi son;
-					du(&son, node.erzi[node.geshu], 1, sizeof(yezi));
-					son.par = node.offset;
-					xie(&son, son.offset, 1, sizeof(yezi));
+					sj.a[0].erzi = xdshuju.a[xdinfor.geshu - 1].erzi;
+					sj.a[0].dkey = parsj.a[valueweizhi - 1].dkey;
+					parsj.a[valueweizhi - 1].dkey = xdshuju.a[xdinfor.geshu - 2].dkey;
+					--xdinfor.geshu;
+					++info.geshu;
+					xienode(&xdinfor, &xdshuju, xdinfor.weizhi);
+					xienode(&info, &sj, info.weizhi);
+					xienode(&infor, &parsj, infor.weizhi);
+					return;
 				}
 				else {
-					mid son;
-					du(&son, node.erzi[node.geshu], 1, sizeof(mid));
-					son.par = node.offset;
-					xie(&son, son.offset, 1, sizeof(mid));
+					hebingbz(xdinfor, xdshuju, info, sj);
+					return;
 				}
-				++node.geshu;
 			}
-			for (int j = i + 1; j < par.geshu - 1; ++j)
-				par.key[j] = par.key[j + 1], par.erzi[j] = par.erzi[j + 1];
-			--par.geshu;
-			xie(&node, node.offset, 1, sizeof(mid));
-			if (jianchamid(par) == Success) xie(&par, par.offset, 1, sizeof(mid));
-			else tiaonode(par);
-			return Success;
-		}
-		OperationResult hebingzuonode(mid node) {
-			if (node.par == 0) return Fail;
-			mid par;
-			du(&par, node.par, 1, sizeof(mid));
-			int i = 0;
-			for (; i < par.geshu; ++i)
-				if (par.erzi[i] == node.offset) break;
-			if (i == par.geshu) throw "fuck";
-			if (i == 0) return Fail;
-			mid left;
-			du(&left, par.erzi[i - 1], 1, sizeof(mid));
-			for (int j = 0; j < node.geshu; ++j) {
-				left.key[left.geshu] = node.key[j];
-				left.erzi[left.geshu] = node.erzi[j];
-				if (left.bz == 1) {
-					yezi son;
-					du(&son, left.erzi[left.geshu], 1, sizeof(yezi));
-					son.par = left.offset;
-					xie(&son, son.offset, 1, sizeof(yezi));
+			if (valueweizhi < infor.geshu - 1) {
+				dunode(&xdinfor, &xdshuju, parsj.a[valueweizhi + 1].erzi);
+				xdinfor.fu = info.fu;
+				if (xdinfor.geshu > keygeshu / 2) {
+					sj.a[info.geshu].erzi = xdshuju.a[0].erzi;
+					sj.a[info.geshu - 1].dkey = parsj.a[valueweizhi].dkey;
+					parsj.a[valueweizhi].dkey = xdshuju.a[0].dkey;
+					for (size_t p = 1; p < xdinfor.geshu; ++p) {
+						xdshuju.a[p - 1] = xdshuju.a[p];
+					}
+					--xdinfor.geshu;
+					++info.geshu;
+					xienode(&xdinfor, &xdshuju, xdinfor.weizhi);
+					xienode(&info, &sj, info.weizhi);
+					xienode(&infor, &parsj, infor.weizhi);
+					return;
 				}
 				else {
-					mid son;
-					du(&son, left.erzi[left.geshu], 1, sizeof(mid));
-					son.par = left.offset;
-					xie(&son, son.offset, 1, sizeof(mid));
+					hebingbz(info, sj, xdinfor, xdshuju);
+					return;
 				}
-				++left.geshu;
 			}
-			for (int j = i; j < par.geshu - 1; ++j)
-				par.key[j] = par.key[j + 1], par.erzi[j] = par.erzi[j + 1];
-			--par.geshu;
-			xie(&left, left.offset, 1, sizeof(mid));
-			if (jianchamid(par) == Success) xie(&par, par.offset, 1, sizeof(mid));
-			else tiaonode(par);
-			return Success;
+		}
+		Key adjust(size_t fzpos, size_t removed_child) {
+			xinxi info;
+			shuju sj;
+			dunode(&info, &sj, fzpos);
+			size_t curpos;
+			for (curpos = 0; sj.a[curpos].erzi != removed_child; ++curpos);
+			Key ans = sj.a[curpos - 1].dkey;
+			sj.a[curpos - 1].dkey = sj.a[curpos].dkey;
+			for (; curpos < info.geshu - 1; ++curpos) {
+				sj.a[curpos] = sj.a[curpos + 1];
+			}
+			--info.geshu;
+			tiaozheng(info, sj);
+			return ans;
+		}
+		void hebingyezi(xinxi & zuoinfor, yezishuju & zuoshuju, xinxi & rinfo, yezishuju & rshuju) {
+			for (size_t p = zuoinfor.geshu, i = 0; i < rinfo.geshu; ++p, ++i) {
+				zuoshuju.a[p].first = rshuju.a[i].first;
+				zuoshuju.a[p].second = rshuju.a[i].second;
+			}
+			zuoinfor.geshu += rinfo.geshu;
+			adjust(rinfo.fu, rinfo.weizhi);
+			zuoinfor.next = rinfo.next;
+			xinxi tmpxinxi;
+			yezishuju tmpshuju;
+			dunode(&tmpxinxi, &tmpshuju, rinfo.next);
+			tmpxinxi.wei = zuoinfor.weizhi;
+			xienode(&tmpxinxi, &tmpshuju, tmpxinxi.weizhi);
+			xienode(&zuoinfor, &zuoshuju, zuoinfor.weizhi);
+		}
+		void pingye(xinxi & yeinff, yezishuju & yesj) {
+			if (yeinff.geshu >= pairgeshu / 2) {
+				xienode(&yeinff, &yesj, yeinff.weizhi);
+				return;
+			}
+			else if (yeinff.weizhi == bptr.rootpos) {
+				if (yeinff.geshu == 0) {
+					xinxi tmpxinxi;
+					yezishuju tmpshuju;
+					dunode(&tmpxinxi, &tmpshuju, bptr.kuaitou);
+					tmpxinxi.next = bptr.kuaiwei;
+					xienode(&tmpxinxi, &tmpshuju, bptr.kuaitou);
+					dunode(&tmpxinxi, &tmpshuju, bptr.kuaiwei);
+					tmpxinxi.wei = bptr.kuaitou;
+					xienode(&tmpxinxi, &tmpshuju, bptr.kuaiwei);
+					return;
+				}
+				xienode(&yeinff, &yesj, yeinff.weizhi);
+				return;
+			}
+			xinxi xdinfor, infor;
+			yezishuju xdshuju;
+			shuju parsj;
+			dunode(&infor, &parsj, yeinff.fu);
+			size_t midpos = 0;
+			for (; midpos < infor.geshu; ++midpos) {
+				if (parsj.a[midpos].erzi == yeinff.weizhi)
+					break;
+			}
+			if (midpos > 0) {
+				dunode(&xdinfor, &xdshuju, yeinff.wei);
+				xdinfor.fu = yeinff.fu;
+				if (xdinfor.geshu > pairgeshu / 2) {
+					for (size_t p = yeinff.geshu; p > 0; --p) {
+						yesj.a[p].first = yesj.a[p - 1].first;
+						yesj.a[p].second = yesj.a[p - 1].second;
+					}
+					yesj.a[0].first = xdshuju.a[xdinfor.geshu - 1].first;
+					yesj.a[0].second = xdshuju.a[xdinfor.geshu - 1].second;
+					--xdinfor.geshu;
+					++yeinff.geshu;
+					gaibz(xdinfor.fu, xdinfor.weizhi, yesj.a[0].first);
+					xienode(&xdinfor, &xdshuju, xdinfor.weizhi);
+					xienode(&yeinff, &yesj, yeinff.weizhi);
+					return;
+				}
+				else {
+					hebingyezi(xdinfor, xdshuju, yeinff, yesj);
+					return;
+				}
+			}
+			if (midpos < infor.geshu - 1) {
+				dunode(&xdinfor, &xdshuju, yeinff.next);
+				xdinfor.fu = yeinff.fu;
+				if (xdinfor.geshu > pairgeshu / 2) {
+					yesj.a[yeinff.geshu].first = xdshuju.a[0].first;
+					yesj.a[yeinff.geshu].second = xdshuju.a[0].second;
+					for (size_t p = 1; p < xdinfor.geshu; ++p) {
+						xdshuju.a[p - 1].first = xdshuju.a[p].first;
+						xdshuju.a[p - 1].second = xdshuju.a[p].second;
+					}
+					++yeinff.geshu;
+					--xdinfor.geshu;
+					gaibz(yeinff.fu, yeinff.weizhi, xdshuju.a[0].first);
+					xienode(&yeinff, &yesj, yeinff.weizhi);
+					xienode(&xdinfor, &xdshuju, xdinfor.weizhi);
+					return;
+				}
+				else {
+					hebingyezi(yeinff, yesj, xdinfor, xdshuju);
+					return;
+				}
+			}
 		}
 	public:
+		typedef pair<const Key, Value> value_type;
+		class const_iterator;
 		class iterator {
-			friend class BTree;
+			friend class sjtu::BTree<Key, Value, Compare>::const_iterator;
+			friend iterator sjtu::BTree<Key, Value, Compare>::begin();
+			friend iterator sjtu::BTree<Key, Value, Compare>::end();
+			friend iterator sjtu::BTree<Key, Value, Compare>::find(const Key&);
+			friend pair<iterator, OperationResult> sjtu::BTree<Key, Value, Compare>::insert(const Key&, const Value&);
 		private:
-
-			size_t offset;
-			int weizhi;
-			BTree* qi;
+			BTree* cur_bptree = nullptr;
+			xinxi kuaiinform;
+			size_t curpos = 0;
 		public:
+			bool modify(const Value& value) {
+				xinxi info;
+				yezishuju yesj;
+				dunode(&info, &yesj, kuaiinform.weizhi);
+				yesj.a[curpos].second = value;
+				xienode(&info, &yesj, kuaiinform.weizhi);
+				return true;
+			}
 			iterator() {
-				qi = nullptr;
-				weizhi = 0, offset = 0;
 			}
-
-			iterator(BTree* _from, size_t _offset = 0, int _place = 0) {
-				qi = _from;
-				offset = _offset; weizhi = _place;
-			}
-
 			iterator(const iterator& other) {
-				qi = other.qi;
-				offset = other.offset;
-				weizhi = other.weizhi;
-
-			}
-			iterator(const const_iterator& other) {
-				qi = other.qi;
-				offset = other.offset;
-				weizhi = other.weizhi;
-			}
-			Value getValue() {
-				yezi p;
-				qi->du(&p, offset, 1, sizeof(yezi));
-				return p.a[weizhi].second;
-			}
-			OperationResult modify(const Value& value) {
-				yezi p;
-				qi->du(&p, offset, 1, sizeof(yezi));
-				p.a[weizhi].second = value;
-				qi->xie(&p, offset, 1, sizeof(yezi));
-				return Success;
+				cur_bptree = other.cur_bptree;
+				kuaiinform = other.kuaiinform;
+				curpos = other.curpos;
 			}
 			iterator operator++(int) {
-				iterator fz = *this;
-				if (*this == qi->end()) {
-
-					qi = nullptr; weizhi = 0; offset = 0;
-					return fz;
+				auto temp = *this;
+				++curpos;
+				if (curpos >= kuaiinform.geshu) {
+					char fz[dakuaisize] = { 0 };
+					memdu(fz, dakuaisize, kuaiinform.next);
+					memcpy(&kuaiinform, fz, sizeof(kuaiinform));
+					curpos = 0;
 				}
-				yezi p;
-				qi->du(&p, offset, 1, sizeof(yezi));
-				if (weizhi == p.geshu - 1) {
-					if (p.next == 0) ++weizhi;
-					else {
-						offset = p.next;
-						weizhi = 0;
-					}
-				}
-				else ++weizhi;
-				return fz;
+				return temp;
 			}
-
 			iterator& operator++() {
-				if (*this == qi->end()) {
-					qi = nullptr; weizhi = 0; offset = 0;
-					return *this;
-
+				++curpos;
+				if (curpos >= kuaiinform.geshu) {
+					char fz[dakuaisize] = { 0 };
+					memdu(fz, dakuaisize, kuaiinform.next);
+					memcpy(&kuaiinform, fz, sizeof(kuaiinform));
+					curpos = 0;
 				}
-				yezi p;
-				qi->du(&p, offset, 1, sizeof(yezi));
-				if (weizhi == p.geshu - 1) {
-					if (p.next == 0) ++weizhi;
-					else {
-						offset = p.next;
-						weizhi = 0;
-					}
-				}
-				else ++weizhi;
 				return *this;
 			}
-
 			iterator operator--(int) {
-				iterator fz = *this;
-				if (*this == qi->begin()) {
-					qi = nullptr; weizhi = 0; offset = 0;
-					return fz;
+				auto temp = *this;
+				if (curpos == 0) {
+					char fz[dakuaisize] = { 0 };
+					memdu(fz, dakuaisize, kuaiinform.wei);
+					memcpy(&kuaiinform, fz, sizeof(kuaiinform));
+					curpos = kuaiinform.geshu - 1;
 				}
-				yezi p, q;
-				qi->du(&p, offset, 1, sizeof(yezi));
-				if (weizhi == 0) {
-					offset = p.pre;
-					qi->du(&q, p.pre, 1, sizeof(yezi));
-					weizhi = q.geshu - 1;
-				}
-				else --weizhi;
-				return fz;
+				else
+					--curpos;
+				return temp;
 			}
 			iterator& operator--() {
-				if (*this == qi->begin()) {
-					qi = nullptr; weizhi = 0; offset = 0;
-					return *this;
+				if (curpos == 0) {
+					char fz[dakuaisize] = { 0 };
+					memdu(fz, dakuaisize, kuaiinform.wei);
+					memcpy(&kuaiinform, fz, sizeof(kuaiinform));
+					curpos = kuaiinform.geshu - 1;
 				}
-				yezi p, q;
-				qi->du(&p, offset, 1, sizeof(yezi));
-				if (weizhi == 0) {
-					offset = p.pre;
-					qi->du(&q, p.pre, 1, sizeof(yezi));
-					weizhi = q.geshu - 1;
-				}
-				else --weizhi;
+				else
+					--curpos;
+
 				return *this;
 			}
-
-			bool operator==(const iterator& rhs) const {
-				return offset == rhs.offset && weizhi == rhs.weizhi && qi == rhs.qi;
+			value_type operator*() const {
+				if (curpos >= kuaiinform.geshu)
+					throw invalid_iterator();
+				char fz[dakuaisize] = { 0 };
+				memdu(fz, dakuaisize, kuaiinform.weizhi);
+				yezishuju yesj;
+				memcpy(&yesj, fz + xinxisize, sizeof(yesj));
+				value_type ires(yesj.a[curpos].first, yesj.a[curpos].second);
+				return ires;
 			}
-			bool operator==(const const_iterator& rhs) const {
-				return offset == rhs.offset && weizhi == rhs.weizhi && qi == rhs.qi;
+			Value getValue() const {
+				if (curpos >= kuaiinform.geshu)
+					throw invalid_iterator();
+				char fz[dakuaisize] = { 0 };
+				memdu(fz, dakuaisize, kuaiinform.weizhi);
+				yezishuju yesj;
+				memcpy(&yesj, fz + xinxisize, sizeof(yesj));
+				return yesj.a[curpos].second;
 			}
-
-			bool operator!=(const iterator& rhs) const {
-				return offset != rhs.offset || weizhi != rhs.weizhi || qi != rhs.qi;
+			bool operator==(const iterator & rhs) const {
+				return cur_bptree == rhs.cur_bptree
+					&& kuaiinform.weizhi == rhs.kuaiinform.weizhi
+					&& curpos == rhs.curpos;
 			}
-			bool operator!=(const const_iterator& rhs) const {
-				return offset != rhs.offset || weizhi != rhs.weizhi || qi != rhs.qi;
+			bool operator==(const const_iterator & rhs) const {
+				return kuaiinform.weizhi == rhs.kuaiinform.weizhi
+					&& curpos == rhs.curpos;
+			}
+			bool operator!=(const iterator & rhs) const {
+				return cur_bptree != rhs.cur_bptree|| kuaiinform.weizhi != rhs.kuaiinform.weizhi|| curpos != rhs.curpos;
+			}
+			bool operator!=(const const_iterator & rhs) const {
+				return kuaiinform.weizhi != rhs.kuaiinform.weizhi|| curpos != rhs.curpos;
 			}
 		};
-
-
-
 		class const_iterator {
-			friend class BTree;
+			friend class sjtu::BTree<Key, Value, Compare>::iterator;
+			friend const_iterator sjtu::BTree<Key, Value, Compare>::cbegin() const;
+			friend const_iterator sjtu::BTree<Key, Value, Compare>::cend() const;
+			friend const_iterator sjtu::BTree<Key, Value, Compare>::find(const Key&) const;
 		private:
-			size_t offset;
-			int weizhi;
-			const BTree* qi;
+			xinxi kuaiinform;
+			size_t curpos = 0;
 		public:
 			const_iterator() {
-				qi = nullptr;
-				weizhi = 0, offset = 0;
 			}
-
-			const_iterator(const BTree* _from, size_t _offset = 0, int _place = 0) {
-				qi = _from;
-				offset = _offset; weizhi = _place;
-			}
-
-			const_iterator(const iterator& other) {
-				qi = other.qi;
-				offset = other.offset;
-				weizhi = other.weizhi;
-			}
-
 			const_iterator(const const_iterator& other) {
-				qi = other.qi;
-				offset = other.offset;
-				weizhi = other.weizhi;
-
+				
 			}
-			Value getValue() {
-				yezi p;
-				qi->du(&p, offset, 1, sizeof(yezi));
-				return p.a[weizhi].second;
+			const_iterator(const iterator& other) {
+				kuaiinform = other.kuaiinform;
+				curpos = other.curpos;
 			}
 			const_iterator operator++(int) {
-				const_iterator fz = *this;
-				if (*this == qi->cend()) {
-					qi = nullptr; weizhi = 0; offset = 0;
-					return fz;
+				auto temp = *this;
+				++curpos;
+				if (curpos >= kuaiinform.geshu) {
+					char fz[dakuaisize] = { 0 };
+					memdu(fz, dakuaisize, kuaiinform.next);
+					memcpy(&kuaiinform, fz, sizeof(kuaiinform));
+					curpos = 0;
 				}
-				yezi p;
-				qi->du(&p, offset, 1, sizeof(yezi));
-				if (weizhi == p.geshu - 1) {
-					if (p.next == 0) ++weizhi;
-					else {
-						offset = p.next;
-						weizhi = 0;
-					}
-				}
-				else ++weizhi;
-				return fz;
+				return temp;
 			}
-
 			const_iterator& operator++() {
-
-				if (*this == qi->cend()) {
-					qi = nullptr; weizhi = 0; offset = 0;
-					return *this;
-
+				++curpos;
+				if (curpos >= kuaiinform.geshu) {
+					char fz[dakuaisize] = { 0 };
+					memdu(fz, dakuaisize, kuaiinform.next);
+					memcpy(&kuaiinform, fz, sizeof(kuaiinform));
+					curpos = 0;
 				}
-				yezi p;
-				qi->du(&p, offset, 1, sizeof(yezi));
-				if (weizhi == p.geshu - 1) {
-					if (p.next == 0) ++weizhi;
-					else {
-
-						offset = p.next;
-						weizhi = 0;
-
-					}
-				}
-				else ++weizhi;
 				return *this;
 			}
-
 			const_iterator operator--(int) {
-				const_iterator fz = *this;
-				if (*this == qi->cbegin()) {
-					qi = nullptr; weizhi = 0; offset = 0;
-					return fz;
-
+				auto temp = *this;
+				if (curpos == 0) {
+					char fz[dakuaisize] = { 0 };
+					memdu(fz, dakuaisize, kuaiinform.wei);
+					memcpy(&kuaiinform, fz, sizeof(kuaiinform));
+					curpos = kuaiinform.geshu - 1;
 				}
-				yezi p, q;
-				qi->du(&p, offset, 1, sizeof(yezi));
-
-				if (weizhi == 0) {
-					offset = p.pre;
-					qi->du(&q, p.pre, 1, sizeof(yezi));
-					weizhi = q.geshu - 1;
-				}
-				else --weizhi;
-				return fz;
+				else
+					--curpos;
+				return temp;
 			}
-
 			const_iterator& operator--() {
-
-				if (*this == qi->cbegin()) {
-					qi = nullptr; weizhi = 0; offset = 0;
-					return *this;
+				if (curpos == 0) {
+					char fz[dakuaisize] = { 0 };
+					memdu(fz, dakuaisize, kuaiinform.wei);
+					memcpy(&kuaiinform, fz, sizeof(kuaiinform));
+					curpos = kuaiinform.geshu - 1;
 				}
-				yezi p, q;
-				qi->du(&p, offset, 1, sizeof(yezi));
-				if (weizhi == 0) {
+				else
+					--curpos;
 
-					offset = p.pre;
-
-					qi->du(&q, p.pre, 1, sizeof(yezi));
-
-					weizhi = q.geshu - 1;
-				}
-				else --weizhi;
 				return *this;
 			}
-
-			bool operator==(const iterator& rhs) const {
-				return offset == rhs.offset && weizhi == rhs.weizhi && qi == rhs.qi;
+			value_type operator*() const {
+				if (curpos >= kuaiinform.geshu)
+					throw invalid_iterator();
+				char fz[dakuaisize] = { 0 };
+				memdu(fz, dakuaisize, kuaiinform.weizhi);
+				yezishuju yesj;
+				memcpy(&yesj, fz + xinxisize, sizeof(yesj));
+				value_type ires(yesj.a[curpos].first, yesj.a[curpos].second);
+				return ires;
 			}
-
-			bool operator==(const const_iterator& rhs) const {
-				return offset == rhs.offset && weizhi == rhs.weizhi && qi == rhs.qi;
+			bool operator==(const iterator & rhs) const {
+				return kuaiinform.weizhi == rhs.kuaiinform.weizhi&& curpos == rhs.curpos;
 			}
-
-			bool operator!=(const iterator& rhs) const {
-				return offset != rhs.offset || weizhi != rhs.weizhi || qi != rhs.qi;
+			bool operator==(const const_iterator & rhs) const {
+				return kuaiinform.weizhi == rhs.kuaiinform.weizhi&& curpos == rhs.curpos;
 			}
-
-			bool operator!=(const const_iterator& rhs) const {
-				return offset != rhs.offset || weizhi != rhs.weizhi || qi != rhs.qi;
+			bool operator!=(const iterator & rhs) const {
+				return kuaiinform.weizhi != rhs.kuaiinform.weizhi|| curpos != rhs.curpos;
 			}
-
+			bool operator!=(const const_iterator & rhs) const {
+				return kuaiinform.weizhi != rhs.kuaiinform.weizhi|| curpos != rhs.curpos;
+			}
 		};
 		BTree() {
-
-			filename.qiming(0);
-			wenjian = nullptr;
-			dakai();
-			if (flag == 0) buildtree();
+			wenjian = fopen(BPTREE_ADDRESS, "rb+");
+			if (!wenjian) {
+				wenjian = fopen(BPTREE_ADDRESS, "wb+");
+				xiexinxi();
+				auto nodeh = bptr.kuaicnt,
+					nodet = bptr.kuaicnt + 1;
+				bptr.kuaitou = nodeh;
+				bptr.kuaiwei = nodet;
+				jianyenode(0, 0, nodet);
+				jianyenode(0, nodeh, 0);
+				return;
+			}
+			char fz[dakuaisize] = { 0 };
+			memdu(fz, dakuaisize, 0);
+			memcpy(&bptr, fz, sizeof(bptr));
 		}
-		BTree(const BTree & other) {
-			filename.qiming(0);
-			dakai();
-			copyfile(filename.erzi, other.filename.erzi);
+		BTree(const BTree& other) {
+			wenjian = fopen(BPTREE_ADDRESS, "rb+");
+			bptr.kuaicnt = other.bptr.kuaicnt;
+			bptr.kuaitou = other.bptr.kuaitou;
+			bptr.kuaiwei = other.bptr.kuaiwei;
+			bptr.rootpos = other.bptr.rootpos;
+			bptr.geshu = other.bptr.geshu;
 		}
-		BTree& operator=(const BTree & other) {
-			filename.qiming(0);
-			dakai();
-			copyfile(filename.erzi, other.filename.erzi);
+		BTree& operator=(const BTree& other) {
+			wenjian = fopen(BPTREE_ADDRESS, "rb+");
+			bptr.kuaicnt = other.bptr.kuaicnt;
+			bptr.kuaitou = other.bptr.kuaitou;
+			bptr.kuaiwei = other.bptr.kuaiwei;
+			bptr.rootpos = other.bptr.rootpos;
+			bptr.geshu = other.bptr.geshu;
+			return *this;
 		}
 		~BTree() {
-			guanbi();
+			xiexinxi();
+			fclose(wenjian);
 		}
-		pair <iterator, OperationResult> insert(const Key & key, const Value & value) {
-			size_t yeoffset = posyezi(key, info.root);
-			yezi ye;
-			if (info.size == 0 || yeoffset == 0) {
-				du(&ye, info.head, 1, sizeof(yezi));
-				pair <iterator, OperationResult> fz = charuyezi(ye, key, value);
-				if (fz.second == Fail) return fz;
-
-				size_t offset = ye.par;
-
-				mid node;
-
-				while (offset != 0) {
-					du(&node, offset, 1, sizeof(mid));
-
-					node.key[0] = key;
-
-					xie(&node, offset, 1, sizeof(mid));
-					offset = node.par;
-				}
-				return fz;
-
+		pair<iterator, OperationResult> insert(const Key& key, const Value& value) {
+			if (empty()) {
+				auto rootpos = jianyenode(0, bptr.kuaitou, bptr.kuaiwei);
+				xinxi tmpxinxi;
+				yezishuju tmpshuju;
+				dunode(&tmpxinxi, &tmpshuju, bptr.kuaitou);
+				tmpxinxi.next = rootpos;
+				xienode(&tmpxinxi, &tmpshuju, bptr.kuaitou);
+				dunode(&tmpxinxi, &tmpshuju, bptr.kuaiwei);
+				tmpxinxi.wei = rootpos;
+				xienode(&tmpxinxi, &tmpshuju, bptr.kuaiwei);
+				dunode(&tmpxinxi, &tmpshuju, rootpos);
+				++tmpxinxi.geshu;
+				tmpshuju.a[0].first = key;
+				tmpshuju.a[0].second = value;
+				xienode(&tmpxinxi, &tmpshuju, rootpos);
+				++bptr.geshu;
+				bptr.rootpos = rootpos;
+				pair<iterator, OperationResult> ires(begin(), Success);
+				return ires;
 			}
-			du(&ye, yeoffset, 1, sizeof(yezi));
-			pair <iterator, OperationResult> fz = charuyezi(ye, key, value);
-			return fz;
+			char fz[dakuaisize] = { 0 };
+			size_t curpos = bptr.rootpos, curfu = 0;
+			while (true) {
+				memdu(fz, dakuaisize, curpos);
+				xinxi temp;
+				memcpy(&temp, fz, sizeof(temp));
+				if (curfu != temp.fu) {
+					temp.fu = curfu;
+					memcpy(fz, &temp, sizeof(temp));
+					memxie(fz, dakuaisize, curpos);
+				}
+				if (temp.bz) {
+					break;
+				}
+				shuju sj;
+				memcpy(&sj, fz + xinxisize, sizeof(sj));
+				size_t child_pos = temp.geshu - 1;
+				for (; child_pos > 0; --child_pos) {
+					if (!(sj.a[child_pos - 1].dkey > key)) {
+						break;
+					}
+				}
+				curfu = curpos;
+				curpos = sj.a[child_pos].erzi;
+			}
+			xinxi info;
+			memcpy(&info, fz, sizeof(info));
+			yezishuju yesj;
+			memcpy(&yesj, fz + xinxisize, sizeof(yesj));
+			for (size_t valueweizhi = 0;; ++valueweizhi) {
+				if (valueweizhi < info.geshu && (!(yesj.a[valueweizhi].first<key || yesj.a[valueweizhi].first>key))) {
+					return pair<iterator, OperationResult>(end(), Fail);
+				}
+				if (valueweizhi >= info.geshu || yesj.a[valueweizhi].first > key) {
+					if (info.geshu >= pairgeshu) {
+						auto cur_key = fenlieyezi(curpos, info, yesj);
+						if (key > cur_key) {
+							curpos = info.next;
+							valueweizhi -= info.geshu;
+							dunode(&info, &yesj, curpos);
+						}
+					}
+
+					for (size_t p = info.geshu - 1; p >= valueweizhi; --p) {
+						yesj.a[p + 1].first = yesj.a[p].first;
+						yesj.a[p + 1].second = yesj.a[p].second;
+						if (p == valueweizhi)
+							break;
+					}
+					yesj.a[valueweizhi].first = key;
+					yesj.a[valueweizhi].second = value;
+					++info.geshu;
+					xienode(&info, &yesj, curpos);
+					iterator ans;
+					ans.kuaiinform = info;
+					ans.cur_bptree = this;
+					ans.curpos = valueweizhi;
+					++bptr.geshu;
+					pair<iterator, OperationResult> to_return(ans, Success);
+					return to_return;
+				}
+			}
+			return pair<iterator, OperationResult>(end(), Fail);
 		}
 		OperationResult erase(const Key & key) {
-			size_t yeoffset = posyezi(key, info.root);
-			if (yeoffset == 0) return Fail;
-			yezi ye;
-			du(&ye, yeoffset, 1, sizeof(yezi));
-			int i = 0;
-			for (; i < ye.geshu; ++i)
-				if (ye.a[i].first == key) break;
-			if (i == ye.geshu) return Fail;
-			for (int j = i + 1; j < ye.geshu; ++j)
-
-				ye.a[j - 1].first = ye.a[j].first, ye.a[j - 1].second = ye.a[j].second;
-
-			ye.geshu--;
-			size_t internal_offset = ye.par;
-			mid node;
-			while (i == 0) {
-				if (internal_offset == 0) break;
-				du(&node, internal_offset, 1, sizeof(mid));
-				i = 0;
-				for (; i < node.geshu; ++i)
-					if (node.key[i] == key) break;
-				node.key[i] = ye.a[0].first;
-				xie(&node, node.offset, 1, sizeof(mid));
-				internal_offset = node.par;
+			if (empty()) {
+				return Fail;
 			}
-			info.size--;
-			xie(&info, infopos, 1, sizeof(xinxi));
-			if (ye.geshu < Nmin) {
-				tiaoye(ye);
-				return Success;
+			char fz[dakuaisize] = { 0 };
+			size_t curpos = bptr.rootpos, curfu = 0;
+			while (true) {
+				memdu(fz, dakuaisize, curpos);
+				xinxi temp;
+				memcpy(&temp, fz, sizeof(temp));
+				if (curfu != temp.fu) {
+					temp.fu = curfu;
+					memcpy(fz, &temp, sizeof(temp));
+					memxie(fz, dakuaisize, curpos);
+				}
+				if (temp.bz) {
+					break;
+				}
+				shuju sj;
+				memcpy(&sj, fz + xinxisize, sizeof(sj));
+				size_t child_pos = temp.geshu - 1;
+				for (; child_pos > 0; --child_pos) {
+					if (!(sj.a[child_pos - 1].dkey > key)) {
+						break;
+					}
+				}
+				curfu = curpos;
+				curpos = sj.a[child_pos].erzi;
 			}
-			xie(&ye, yeoffset, 1, sizeof(yezi));
-			return Success;
+
+			xinxi info;
+			memcpy(&info, fz, sizeof(info));
+			yezishuju yesj;
+			memcpy(&yesj, fz + xinxisize, sizeof(yesj));
+			for (size_t valueweizhi = 0;; ++valueweizhi) {
+				if (valueweizhi < info.geshu && (!(yesj.a[valueweizhi].first<key || yesj.a[valueweizhi].first>key))) {
+					--info.geshu;
+					for (size_t p = valueweizhi; p < info.geshu; ++p) {
+						yesj.a[p].first = yesj.a[p + 1].first;
+						yesj.a[p].second = yesj.a[p + 1].second;
+					}
+					pingye(info, yesj);
+					--bptr.geshu;
+					return Success;
+				}
+				if (valueweizhi >= info.geshu || yesj.a[valueweizhi].first > key) {
+					return Fail;
+				}
+			}
+			return Fail; 
 		}
 		iterator begin() {
-			return iterator(this, info.head, 0);
+			iterator ires;
+			char fz[dakuaisize] = { 0 };
+			memdu(fz, dakuaisize, bptr.kuaitou);
+			xinxi block_head;
+			memcpy(&block_head, fz, sizeof(block_head));
+			ires.kuaiinform = block_head;
+			ires.cur_bptree = this;
+			ires.curpos = 0;
+			++ires;
+			return ires;
 		}
-
 		const_iterator cbegin() const {
-			return const_iterator(this, info.head, 0);
+			const_iterator ires;
+			char fz[dakuaisize] = { 0 };
+			memdu(fz, dakuaisize, bptr.kuaitou);
+			xinxi block_head;
+			memcpy(&block_head, fz, sizeof(block_head));
+			ires.kuaiinform = block_head;
+			ires.curpos = 0;
+			++ires;
+			return ires;
 		}
 		iterator end() {
-			yezi wei;
-			du(&wei, info.wei, 1, sizeof(yezi));
-			return iterator(this, info.wei, wei.geshu);
+			iterator ires;
+			char fz[dakuaisize] = { 0 };
+			memdu(fz, dakuaisize, bptr.kuaiwei);
+			xinxi block_head;
+			memcpy(&block_head, fz, sizeof(block_head));
+			ires.kuaiinform = block_head;
+			ires.cur_bptree = this;
+			ires.curpos = 0;
+			return ires;
 		}
-
 		const_iterator cend() const {
-			yezi wei;
-			du(&wei, info.wei, 1, sizeof(yezi));
-			return const_iterator(this, info.wei, wei.geshu);
+			const_iterator ires;
+			char fz[dakuaisize] = { 0 };
+			memdu(fz, dakuaisize, bptr.kuaiwei);
+			xinxi block_head;
+			memcpy(&block_head, fz, sizeof(block_head));
+			ires.kuaiinform = block_head;
+			ires.curpos = 0;
+			return ires;
 		}
-		bool empty() const { return info.size == 0; }
-		size_t size() const { return info.size; }
+		bool empty() const {
+			if (!wenjian)
+				return true;
+			return bptr.geshu == 0;
+		}
+		size_t size() const {
+			if (!wenjian)
+				return 0;
+			return bptr.geshu;
+		}
 		void clear() {
-			guanbi();
-			wenjian = fopen(filename.erzi, "w");
-			fclose(wenjian);
-			dakai();
-			buildtree();
+			if (!wenjian)
+				return;
+			remove(BPTREE_ADDRESS);
+			ffile new_file_head;
+			bptr = new_file_head;
+			wenjian = nullptr;
+		}
+		Value at(const Key & key) {
+			if (empty()) {
+				throw container_is_empty();
+			}
+			char fz[dakuaisize] = { 0 };
+			size_t curpos = bptr.rootpos, curfu = 0;
+			while (true) {
+				memdu(fz, dakuaisize, curpos);
+				xinxi temp;
+				memcpy(&temp, fz, sizeof(temp));
+				if (curfu != temp.fu) {
+					temp.fu = curfu;
+					memcpy(fz, &temp, sizeof(temp));
+					memxie(fz, dakuaisize, curpos);
+				}
+				if (temp.bz) {
+					break;
+				}
+				shuju sj;
+				memcpy(&sj, fz + xinxisize, sizeof(sj));
+				size_t child_pos = temp.geshu - 1;
+				for (; child_pos > 0; --child_pos) {
+					if (!(sj.a[child_pos - 1].dkey > key)) {
+						break;
+					}
+				}
+				curfu = curpos;
+				curpos = sj.a[child_pos].erzi;
+			}
+			xinxi info;
+			memcpy(&info, fz, sizeof(info));
+			yezishuju yesj;
+			memcpy(&yesj, fz + xinxisize, sizeof(yesj));
+			for (size_t valueweizhi = 0;; ++valueweizhi) {
+				if (valueweizhi < info.geshu && (!(yesj.a[valueweizhi].first<key || yesj.a[valueweizhi].first>key))) {
+					return yesj.a[valueweizhi].second;
+				}
+				if (valueweizhi >= info.geshu || yesj.a[valueweizhi].first > key) {
+					throw index_out_of_bound();
+				}
+			}
 		}
 		size_t count(const Key & key) const {
-			return static_cast <size_t> (find(key) != cend());
-		}
-
-		Value at(const Key & key) {
-			iterator it = find(key);
-			yezi ye;
-			if (it == end()) {
-				throw "not found";
-			}
-			du(&ye, it.offset, 1, sizeof(yezi));
-			return ye.a[it.weizhi].second;
+			return find(key) == cend() ? 0 : 1;
 		}
 		iterator find(const Key & key) {
-			size_t yeoffset = posyezi(key, info.root);
-			if (yeoffset == 0) return end();
-			yezi ye;
-			du(&ye, yeoffset, 1, sizeof(yezi));
-			for (int j = 0; j < ye.geshu; ++j)
-				if (ye.a[j].first == key) return iterator(this, yeoffset, j);
+			if (empty()) {
+				return end();
+			}
+			char fz[dakuaisize] = { 0 };
+			size_t curpos = bptr.rootpos, curfu = 0;
+			while (true) {
+				memdu(fz, dakuaisize, curpos);
+				xinxi temp;
+				memcpy(&temp, fz, sizeof(temp));
+				if (curfu != temp.fu) {
+					temp.fu = curfu;
+					memcpy(fz, &temp, sizeof(temp));
+					memxie(fz, dakuaisize, curpos);
+				}
+				if (temp.bz) {
+					break;
+				}
+				shuju sj;
+				memcpy(&sj, fz + xinxisize, sizeof(sj));
+				size_t child_pos = temp.geshu - 1;
+				for (; child_pos > 0; --child_pos) {
+					if (!(sj.a[child_pos - 1].dkey > key)) {
+						break;
+					}
+				}
+				curfu = curpos;
+				curpos = sj.a[child_pos].erzi;
+			}
+			xinxi info;
+			memcpy(&info, fz, sizeof(info));
+			sizeof(shuju);
+			yezishuju yesj;
+			memcpy(&yesj, fz + xinxisize, sizeof(yesj));
+			for (size_t valueweizhi = 0;; ++valueweizhi) {
+				if (valueweizhi < info.geshu && (!(yesj.a[valueweizhi].first<key || yesj.a[valueweizhi].first>key))) {
+					iterator ires;
+					ires.cur_bptree = this;
+					ires.kuaiinform = info;
+					ires.curpos = valueweizhi;
+					return ires;
+				}
+				if (valueweizhi >= info.geshu || yesj.a[valueweizhi].first > key) {
+					return end();
+				}
+			}
 			return end();
 		}
-
 		const_iterator find(const Key & key) const {
-			size_t yeoffset = posyezi(key, info.root);
-			if (yeoffset == 0) return cend();
-			yezi ye;
-			du(&ye, yeoffset, 1, sizeof(yezi));
-			for (int j = 0; j < ye.geshu; ++j)
-				if (ye.a[j].first == key) return const_iterator(this, yeoffset, j);
+			if (empty()) {
+				return cend();
+			}
+			char fz[dakuaisize] = { 0 };
+			size_t curpos = bptr.rootpos, curfu = 0;
+			while (true) {
+				memdu(fz, dakuaisize, curpos);
+				xinxi temp;
+				memcpy(&temp, fz, sizeof(temp));
+				if (curfu != temp.fu) {
+					temp.fu = curfu;
+					memcpy(fz, &temp, sizeof(temp));
+					memxie(fz, dakuaisize, curpos);
+				}
+				if (temp.bz) {
+					break;
+				}
+				shuju sj;
+				memcpy(&sj, fz + xinxisize, sizeof(sj));
+				size_t child_pos = temp.geshu - 1;
+				for (; child_pos > 0; --child_pos) {
+					if (!(sj.a[child_pos - 1].dkey > key)) {
+						break;
+					}
+				}
+				curfu = curpos;
+				curpos = sj.a[child_pos].erzi;
+			}
+			xinxi info;
+			memcpy(&info, fz, sizeof(info));
+			yezishuju yesj;
+			memcpy(&yesj, fz + xinxisize, sizeof(yesj));
+			for (size_t valueweizhi = 0;; ++valueweizhi) {
+				if (valueweizhi < info.geshu && (!(yesj.a[valueweizhi].first<key || yesj.a[valueweizhi].first>key))) {
+					const_iterator ires;
+					ires.kuaiinform = info;
+					ires.curpos = valueweizhi;
+					return ires;
+				}
+				if (valueweizhi >= info.geshu || yesj.a[valueweizhi].first > key) {
+					return cend();
+				}
+			}
 			return cend();
 		}
 	};
-
-}  // namespace sjtu
+	template <typename Key, typename Value, typename Compare> FILE* BTree<Key, Value, Compare>::wenjian = nullptr;
+}  
