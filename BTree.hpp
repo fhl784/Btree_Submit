@@ -99,7 +99,7 @@ namespace sjtu {
 			xienode(&temp, &yesj, midpos);
 			return midpos;
 		}
-		void charubz(xinxi & infor, shuju & parsj,size_t zuzong, size_t xinpos, const Key & xinbz) {
+		void charubz(xinxi & infor, shuju & parsj, size_t zuzong, size_t xinpos, const Key & xinbz) {
 			++infor.geshu;
 			auto p = infor.geshu - 2;
 			for (; parsj.a[p].erzi != zuzong; --p) {
@@ -155,7 +155,7 @@ namespace sjtu {
 			xinxi xininfor;
 			yezishuju xinshuju;
 			dunode(&xininfor, &xinshuju, xinpos);
-			size_t zhongpos = fuinfo.geshu /2;
+			size_t zhongpos = fuinfo.geshu / 2;
 			for (size_t p = zhongpos, i = 0; p < fuinfo.geshu; ++p, ++i) {
 				xinshuju.a[i].first = fushuju.a[p].first;
 				xinshuju.a[i].second = fushuju.a[p].second;
@@ -196,7 +196,7 @@ namespace sjtu {
 			xinxi xininfor;
 			shuju xinshuju;
 			dunode(&xininfor, &xinshuju, xinpos);
-			size_t zhongpos = fuinfo.geshu /2;
+			size_t zhongpos = fuinfo.geshu / 2;
 			for (size_t p = zhongpos + 1, i = 0; p < fuinfo.geshu; ++p, ++i) {
 				if (fushuju.a[p].erzi == erziinfor.weizhi) {
 					erziinfor.fu = xinpos;
@@ -505,10 +505,10 @@ namespace sjtu {
 					&& curpos == rhs.curpos;
 			}
 			bool operator!=(const iterator & rhs) const {
-				return cur_bptree != rhs.cur_bptree|| kuaiinform.weizhi != rhs.kuaiinform.weizhi|| curpos != rhs.curpos;
+				return cur_bptree != rhs.cur_bptree || kuaiinform.weizhi != rhs.kuaiinform.weizhi || curpos != rhs.curpos;
 			}
 			bool operator!=(const const_iterator & rhs) const {
-				return kuaiinform.weizhi != rhs.kuaiinform.weizhi|| curpos != rhs.curpos;
+				return kuaiinform.weizhi != rhs.kuaiinform.weizhi || curpos != rhs.curpos;
 			}
 		};
 		class const_iterator {
@@ -523,7 +523,7 @@ namespace sjtu {
 			const_iterator() {
 			}
 			const_iterator(const const_iterator& other) {
-				
+
 			}
 			const_iterator(const iterator& other) {
 				kuaiinform = other.kuaiinform;
@@ -585,16 +585,16 @@ namespace sjtu {
 				return ires;
 			}
 			bool operator==(const iterator & rhs) const {
-				return kuaiinform.weizhi == rhs.kuaiinform.weizhi&& curpos == rhs.curpos;
+				return kuaiinform.weizhi == rhs.kuaiinform.weizhi && curpos == rhs.curpos;
 			}
 			bool operator==(const const_iterator & rhs) const {
-				return kuaiinform.weizhi == rhs.kuaiinform.weizhi&& curpos == rhs.curpos;
+				return kuaiinform.weizhi == rhs.kuaiinform.weizhi && curpos == rhs.curpos;
 			}
 			bool operator!=(const iterator & rhs) const {
-				return kuaiinform.weizhi != rhs.kuaiinform.weizhi|| curpos != rhs.curpos;
+				return kuaiinform.weizhi != rhs.kuaiinform.weizhi || curpos != rhs.curpos;
 			}
 			bool operator!=(const const_iterator & rhs) const {
-				return kuaiinform.weizhi != rhs.kuaiinform.weizhi|| curpos != rhs.curpos;
+				return kuaiinform.weizhi != rhs.kuaiinform.weizhi || curpos != rhs.curpos;
 			}
 		};
 		BTree() {
@@ -769,7 +769,7 @@ namespace sjtu {
 					return Fail;
 				}
 			}
-			return Fail; 
+			return Fail;
 		}
 		iterator begin() {
 			iterator ires;
@@ -974,4 +974,4 @@ namespace sjtu {
 		}
 	};
 	template <typename Key, typename Value, typename Compare> FILE* BTree<Key, Value, Compare>::wenjian = nullptr;
-}  
+}
